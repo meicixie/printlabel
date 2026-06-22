@@ -1,0 +1,5 @@
+{
+  "name": "圖書條碼列印工具",
+  "description": "支援自訂校名與 A4 20格標籤格式的圖書條碼與書標列印工具。",
+  "requestFramePermissions": []
+}
