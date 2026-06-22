@@ -102,7 +102,7 @@ export default function App() {
     }))
   );
 
-  const [schoolName, setSchoolName] = useState<string>('');
+  const [schoolName, setSchoolName] = useState<string>('臺北市內湖區康寧國民小學圖書館');
   const [syncWithLeft, setSyncWithLeft] = useState<boolean[]>(new Array(20).fill(false));
   const [offsets, setOffsets] = useState<PrintOffsets>({ x: -2.5, y: -2.5 });
 
