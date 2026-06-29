@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
-import { Printer, Trash2, Plus, LayoutGrid, FileText, ExternalLink, Settings2 } from 'lucide-react';
+import { Printer, Trash2, Plus, LayoutGrid, FileText, ExternalLink, Settings2, Palette, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface BookEntry {
   id: number;
@@ -16,7 +16,17 @@ interface PrintOffsets {
   y: number;
 }
 
-const CLASSIFICATION_COLORS: { [key: string]: string } = {
+interface AppStorageData {
+  entries: BookEntry[];
+  schoolName: string;
+  syncWithLeft: boolean[];
+  offsets: PrintOffsets;
+  classificationColors: { [key: string]: string };
+}
+
+const STORAGE_KEY = 'lib_barcode_printer_app_data_v1';
+
+const DEFAULT_CLASSIFICATION_COLORS: { [key: string]: string } = {
   '0': '#5e2488',
   '1': '#ffff00',
   '2': '#663300',
@@ -29,7 +39,35 @@ const CLASSIFICATION_COLORS: { [key: string]: string } = {
   '9': '#78b025',
 };
 
-const BarcodeComponent: React.FC<{ entry: BookEntry; schoolName: string }> = ({ entry, schoolName }) => {
+const CLASSIFICATION_LABELS: { [key: string]: string } = {
+  '0': '000總類',
+  '1': '100哲學類',
+  '2': '200宗教類',
+  '3': '300科學類',
+  '4': '400應用科學類',
+  '5': '500社會科學類',
+  '6': '600中國史地類',
+  '7': '700世界史地類',
+  '8': '800語言文學類',
+  '9': '900藝術類',
+};
+
+const getInitialStorage = (): Partial<AppStorageData> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    console.error('Failed to parse localStorage', e);
+    return {};
+  }
+};
+
+const BarcodeComponent: React.FC<{ 
+  entry: BookEntry; 
+  schoolName: string;
+  classificationColors: { [key: string]: string };
+}> = ({ entry, schoolName, classificationColors }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -52,7 +90,7 @@ const BarcodeComponent: React.FC<{ entry: BookEntry; schoolName: string }> = ({ 
 
   const getClassificationColor = (cls: string) => {
     const firstDigit = cls.trim().charAt(0);
-    return CLASSIFICATION_COLORS[firstDigit] || '#cccccc';
+    return classificationColors[firstDigit] || '#cccccc';
   };
 
   return (
@@ -91,20 +129,58 @@ const BarcodeComponent: React.FC<{ entry: BookEntry; schoolName: string }> = ({ 
 };
 
 export default function App() {
+  const initialData = useRef(getInitialStorage()).current;
+
   const [entries, setEntries] = useState<BookEntry[]>(
-    Array.from({ length: 20 }, (_, i) => ({
-      id: i,
-      accessionNumber: '',
-      title: '',
-      classification: '',
-      authorNumber: '',
-      volumeCopy: '',
-    }))
+    initialData.entries?.length === 20
+      ? initialData.entries
+      : Array.from({ length: 20 }, (_, i) => ({
+          id: i,
+          accessionNumber: '',
+          title: '',
+          classification: '',
+          authorNumber: '',
+          volumeCopy: '',
+        }))
   );
 
-  const [schoolName, setSchoolName] = useState<string>('臺北市內湖區康寧國民小學圖書館');
-  const [syncWithLeft, setSyncWithLeft] = useState<boolean[]>(new Array(20).fill(false));
-  const [offsets, setOffsets] = useState<PrintOffsets>({ x: -2.5, y: -2.5 });
+  // 1. 校名標題預設留空讓使用者自行輸入
+  const [schoolName, setSchoolName] = useState<string>(
+    initialData.schoolName !== undefined ? initialData.schoolName : ''
+  );
+
+  const [syncWithLeft, setSyncWithLeft] = useState<boolean[]>(
+    initialData.syncWithLeft?.length === 20
+      ? initialData.syncWithLeft
+      : new Array(20).fill(false)
+  );
+
+  const [offsets, setOffsets] = useState<PrintOffsets>(
+    initialData.offsets || { x: -2.5, y: -2.5 }
+  );
+
+  // 2. 十大分類書標套色自訂欄位
+  const [classificationColors, setClassificationColors] = useState<{ [key: string]: string }>(
+    initialData.classificationColors || DEFAULT_CLASSIFICATION_COLORS
+  );
+
+  const [showColorPicker, setShowColorPicker] = useState<boolean>(false);
+
+  // 3. 暫存至 LocalStorage
+  useEffect(() => {
+    try {
+      const dataToSave: AppStorageData = {
+        entries,
+        schoolName,
+        syncWithLeft,
+        offsets,
+        classificationColors,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+    } catch (e) {
+      console.error('Failed to save data to localStorage', e);
+    }
+  }, [entries, schoolName, syncWithLeft, offsets, classificationColors]);
 
   const updateEntry = (id: number, field: keyof BookEntry, value: string) => {
     setEntries(prev => {
@@ -176,7 +252,7 @@ export default function App() {
             <LayoutGrid className="text-blue-600" />
             圖書條碼列印工具
           </h1>
-          <p className="text-slate-500 mt-1">A4 規格：2x10 共 20 組標籤</p>
+          <p className="text-slate-500 mt-1">A4 規格：2x10 共 20 組標籤（資料自動本機暫存）</p>
           
           {/* 設定與調整區 */}
           <div className="mt-4 flex flex-col sm:flex-row flex-wrap gap-4">
@@ -188,7 +264,7 @@ export default function App() {
                 value={schoolName}
                 onChange={(e) => setSchoolName(e.target.value)}
                 placeholder="例如：臺北市內湖區康寧國民小學圖書館"
-                className="w-full sm:w-64 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-medium text-slate-700"
+                className="w-full sm:w-80 md:w-96 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-medium text-slate-700"
               />
             </div>
 
@@ -222,7 +298,63 @@ export default function App() {
               </div>
               <p className="text-[10px] text-slate-400 ml-2 max-w-[150px] hidden md:block">正值向右/下，負值向左/上</p>
             </div>
+
+            {/* 分類邊框套色設定按鈕 */}
+            <button
+              onClick={() => setShowColorPicker(!showColorPicker)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors shadow-sm cursor-pointer ${
+                showColorPicker
+                  ? 'bg-blue-50 border-blue-200 text-blue-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Palette size={16} className={showColorPicker ? 'text-blue-600' : 'text-slate-500'} />
+              <span>十大分類書標套色設定</span>
+              {showColorPicker ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
           </div>
+
+          {/* 十大分類書標顏色展開面板 */}
+          {showColorPicker && (
+            <div className="mt-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm transition-all">
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Palette size={16} className="text-blue-600" />
+                  十大分類書標邊框套色自訂 (0~9類)
+                </span>
+                <button
+                  onClick={() => setClassificationColors(DEFAULT_CLASSIFICATION_COLORS)}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-600 px-2.5 py-1 rounded border border-slate-200 hover:border-blue-300 transition-colors cursor-pointer"
+                >
+                  <RotateCcw size={12} />
+                  恢復預設套色
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {Object.keys(DEFAULT_CLASSIFICATION_COLORS).map((digit) => (
+                  <div key={digit} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <input
+                      type="color"
+                      value={classificationColors[digit] || '#cccccc'}
+                      onChange={(e) => setClassificationColors(prev => ({ ...prev, [digit]: e.target.value }))}
+                      className="w-7 h-7 rounded cursor-pointer border-0 p-0 bg-transparent shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-slate-700 truncate" title={CLASSIFICATION_LABELS[digit]}>{CLASSIFICATION_LABELS[digit]}</div>
+                      <input
+                        type="text"
+                        value={classificationColors[digit] || ''}
+                        onChange={(e) => setClassificationColors(prev => ({ ...prev, [digit]: e.target.value }))}
+                        className="text-[11px] font-mono text-slate-500 bg-transparent uppercase w-full outline-none focus:text-blue-600"
+                        maxLength={7}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {isInIframe && (
             <p className="text-amber-600 text-sm mt-4 flex items-center gap-1 bg-amber-50 p-2 rounded border border-amber-100">
@@ -234,15 +366,15 @@ export default function App() {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={clearAll}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
           >
             <Trash2 size={18} />
-            清空全部
+            清空表格
           </button>
           {isInIframe && (
             <button
               onClick={handleOpenNewTab}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-md font-medium"
+              className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-md font-medium cursor-pointer"
             >
               <ExternalLink size={18} />
               在新分頁開啟
@@ -250,7 +382,7 @@ export default function App() {
           )}
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md font-medium"
+            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md font-medium cursor-pointer"
           >
             <Printer size={18} />
             列印標籤
@@ -357,7 +489,11 @@ export default function App() {
         >
           {entries.map((entry, index) => (
             <div key={entry.id} style={{ paddingLeft: index % 2 === 1 ? '0.2cm' : '0' }}>
-              <BarcodeComponent entry={entry} schoolName={schoolName} />
+              <BarcodeComponent 
+                entry={entry} 
+                schoolName={schoolName}
+                classificationColors={classificationColors}
+              />
             </div>
           ))}
         </div>
@@ -403,3 +539,4 @@ export default function App() {
     </div>
   );
 }
+

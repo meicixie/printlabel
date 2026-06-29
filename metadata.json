@@ -1,5 +1,5 @@
 {
-  "name": "圖書條碼列印工具",
-  "description": "支援自訂校名與 A4 20格標籤格式的圖書條碼與書標列印工具。",
+  "name": "Remix: Remix: 圖書條碼書標列印工具",
+  "description": "專為康寧國小設計的圖書條碼與書標列印工具，支援 A4 20格標籤格式。",
   "requestFramePermissions": []
 }
