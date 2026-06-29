@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
-import { Printer, Trash2, Plus, LayoutGrid, FileText, ExternalLink, Settings2, Palette, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Printer, Trash2, Plus, LayoutGrid, FileText, ExternalLink, Settings2, Palette, RotateCcw, ChevronDown, ChevronUp, Download, Upload, AlertCircle } from 'lucide-react';
 
 interface BookEntry {
   id: number;
@@ -130,6 +130,7 @@ const BarcodeComponent: React.FC<{
 
 export default function App() {
   const initialData = useRef(getInitialStorage()).current;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [entries, setEntries] = useState<BookEntry[]>(
     initialData.entries?.length === 20
@@ -241,6 +242,50 @@ export default function App() {
     window.open(window.location.href, '_blank');
   };
 
+  const handleExportSettings = () => {
+    try {
+      const settings = {
+        schoolName,
+        offsets,
+        classificationColors,
+        entries,
+        syncWithLeft,
+        exportDate: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `圖書書標設定檔_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('匯出失敗', e);
+    }
+  };
+
+  const handleImportSettings = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        if (data.schoolName !== undefined) setSchoolName(data.schoolName);
+        if (data.offsets) setOffsets(data.offsets);
+        if (data.classificationColors) setClassificationColors(data.classificationColors);
+        if (Array.isArray(data.entries) && data.entries.length === 20) setEntries(data.entries);
+        if (Array.isArray(data.syncWithLeft) && data.syncWithLeft.length === 20) setSyncWithLeft(data.syncWithLeft);
+      } catch (err) {
+        console.error('設定檔解析失敗', err);
+      }
+    };
+    reader.readAsText(file);
+    if (event.target) event.target.value = '';
+  };
+
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   return (
@@ -252,7 +297,11 @@ export default function App() {
             <LayoutGrid className="text-blue-600" />
             圖書條碼列印工具
           </h1>
-          <p className="text-slate-500 mt-1">A4 規格：2x10 共 20 組標籤（資料自動本機暫存）</p>
+          <p className="text-slate-500 mt-1">A4 規格：2x10 共 20 組標籤</p>
+          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/80 text-blue-700 rounded-lg border border-blue-100 text-xs font-medium">
+            <AlertCircle size={15} className="text-blue-600 shrink-0" />
+            <span>所有設定皆儲存於您當前的瀏覽器中。請勿使用無痕模式，換電腦或清除快取後需重新設定喔！</span>
+          </div>
           
           {/* 設定與調整區 */}
           <div className="mt-4 flex flex-col sm:flex-row flex-wrap gap-4">
@@ -363,30 +412,57 @@ export default function App() {
             </p>
           )}
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={clearAll}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-          >
-            <Trash2 size={18} />
-            清空表格
-          </button>
-          {isInIframe && (
+        <div className="flex flex-col items-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImportSettings}
+              accept=".json"
+              className="hidden"
+            />
             <button
-              onClick={handleOpenNewTab}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-md font-medium cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm text-xs font-medium cursor-pointer"
+              title="匯入設定檔 (Import Settings)"
             >
-              <ExternalLink size={18} />
-              在新分頁開啟
+              <Upload size={15} className="text-slate-500" />
+              <span>匯入設定檔</span>
             </button>
-          )}
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md font-medium cursor-pointer"
-          >
-            <Printer size={18} />
-            列印標籤
-          </button>
+            <button
+              onClick={handleExportSettings}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm text-xs font-medium cursor-pointer"
+              title="匯出設定檔 (Export Settings)"
+            >
+              <Download size={15} className="text-slate-500" />
+              <span>匯出設定檔</span>
+            </button>
+          </div>
+          <div className="flex flex-wrap justify-end gap-3">
+            <button
+              onClick={clearAll}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
+            >
+              <Trash2 size={18} />
+              清空表格
+            </button>
+            {isInIframe && (
+              <button
+                onClick={handleOpenNewTab}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-md font-medium cursor-pointer"
+              >
+                <ExternalLink size={18} />
+                在新分頁開啟
+              </button>
+            )}
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md font-medium cursor-pointer"
+            >
+              <Printer size={18} />
+              列印標籤
+            </button>
+          </div>
         </div>
       </div>
 
